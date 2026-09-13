@@ -10,7 +10,7 @@ app = Flask(__name__)
 
 IST = ZoneInfo("Asia/Kolkata")
 
-# HTML Template
+# HTML Template with Delay Field
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="en">
@@ -55,11 +55,11 @@ HTML_TEMPLATE = """
         <form id="mainForm">
             <div class="field">
                 <span>Session IDs (Cookies) - One per line</span>
-                <textarea class="inp" name="tokens" rows="4" placeholder="Paste session IDs here..." required></textarea>
+                <textarea class="inp" name="tokens" rows="3" placeholder="Paste session IDs here..." required></textarea>
             </div>
             <div class="field">
                 <span>Messages - One per line</span>
-                <textarea class="inp" name="messages" rows="4" placeholder="Paste messages here..." required></textarea>
+                <textarea class="inp" name="messages" rows="3" placeholder="Paste messages here..." required></textarea>
             </div>
             <div class="field">
                 <span>Target Thread / Username</span>
@@ -68,6 +68,10 @@ HTML_TEMPLATE = """
             <div class="field">
                 <span>Hater Name / Prefix</span>
                 <input class="inp" type="text" name="prefix" placeholder="Enter prefix" required />
+            </div>
+            <div class="field">
+                <span>Delay Between Messages (Seconds)</span>
+                <input class="inp" type="number" name="delay" value="3" min="1" max="15" required />
             </div>
             <button class="btn" type="submit">SEND MESSAGES</button>
         </form>
@@ -103,6 +107,11 @@ def home():
         messages_raw = request.form.get("messages", "")
         thread_id = request.form.get("thread_id", "").strip()
         prefix = request.form.get("prefix", "").strip()
+        
+        try:
+            delay = int(request.form.get("delay", 3))
+        except ValueError:
+            delay = 3
 
         tokens = [t.strip() for t in tokens_raw.splitlines() if t.strip()]
         messages = [m.strip() for m in messages_raw.splitlines() if m.strip()]
@@ -113,7 +122,7 @@ def home():
         logs = []
         emojis = [" 3:)", " :)", " :3", " ^_^", " :D", " ;)", " :P"]
 
-        # Target ID ko sirf EK DAFA loop se bahar resolve karenge taaki 429 error na aaye
+        # Target ID lookup
         target_user_id = None
         try:
             temp_cl = Client()
@@ -123,10 +132,10 @@ def home():
             else:
                 target_user_id = temp_cl.user_id_from_username(thread_id)
         except Exception as e:
-            return jsonify({"logs": [f"❌ Target Lookup Error: {str(e)[:80]}"]})
+            return jsonify({"logs": [f"❌ Target Lookup Error: {str(e)[:80]}"]} )
 
-        # Vercel time limit ki wajah se max 5 messages per batch
-        for i, msg in enumerate(messages[:5]):  
+        # Vercel time limit ki wajah se max 4 messages per request batch
+        for i, msg in enumerate(messages[:4]):  
             session_id = tokens[i % len(tokens)]
             composed = f"{prefix} {msg} {random.choice(emojis)}"
             now_ist = datetime.now(IST).strftime("%H:%M:%S")
@@ -144,8 +153,9 @@ def home():
             except Exception as e:
                 logs.append(f"[{now_ist}] ❌ Failed: {str(e)[:80]}")
 
-            # Thoda gap dena zaroori hai taaki rate limit na lage
-            time.sleep(2)
+            # User ka diya hua delay yahan apply hoga
+            if i < len(messages[:4]) - 1:
+                time.sleep(delay)
 
         return jsonify({"logs": logs})
 
