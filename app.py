@@ -113,7 +113,19 @@ def home():
         logs = []
         emojis = [" 3:)", " :)", " :3", " ^_^", " :D", " ;)", " :P"]
 
-        # Vercel time limit ki wajah se ek batch mein max 5 messages process honge
+        # Target ID ko sirf EK DAFA loop se bahar resolve karenge taaki 429 error na aaye
+        target_user_id = None
+        try:
+            temp_cl = Client()
+            temp_cl.login_by_sessionid(tokens[0].strip())
+            if thread_id.isdigit():
+                target_user_id = int(thread_id)
+            else:
+                target_user_id = temp_cl.user_id_from_username(thread_id)
+        except Exception as e:
+            return jsonify({"logs": [f"❌ Target Lookup Error: {str(e)[:80]}"]})
+
+        # Vercel time limit ki wajah se max 5 messages per batch
         for i, msg in enumerate(messages[:5]):  
             session_id = tokens[i % len(tokens)]
             composed = f"{prefix} {msg} {random.choice(emojis)}"
@@ -123,21 +135,17 @@ def home():
                 cl = Client()
                 cl.login_by_sessionid(session_id.strip())
                 
-                # Username or ID handling
-                if thread_id.isdigit():
-                    target_id_val = int(thread_id)
-                    try:
-                        cl.direct_send(composed, thread_ids=[target_id_val])
-                    except Exception:
-                        cl.direct_seed(composed, user_ids=[target_id_val])
-                else:
-                    # Agar username diya hai toh automatic user id fetch karega
-                    user_id = cl.user_id_from_username(thread_id)
-                    cl.direct_send(composed, user_ids=[user_id])
+                try:
+                    cl.direct_send(composed, thread_ids=[target_user_id])
+                except Exception:
+                    cl.direct_send(composed, user_ids=[target_user_id])
 
                 logs.append(f"[{now_ist}] ✅ Sent: {composed}")
             except Exception as e:
                 logs.append(f"[{now_ist}] ❌ Failed: {str(e)[:80]}")
+
+            # Thoda gap dena zaroori hai taaki rate limit na lage
+            time.sleep(2)
 
         return jsonify({"logs": logs})
 
