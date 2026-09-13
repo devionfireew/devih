@@ -62,8 +62,8 @@ HTML_TEMPLATE = """
                 <textarea class="inp" name="messages" rows="4" placeholder="Paste messages here..." required></textarea>
             </div>
             <div class="field">
-                <span>Target Thread / User ID</span>
-                <input class="inp" type="text" name="thread_id" placeholder="Enter ID" required />
+                <span>Target Thread / Username</span>
+                <input class="inp" type="text" name="thread_id" placeholder="Enter ID or Username (e.g. devi_onfiire)" required />
             </div>
             <div class="field">
                 <span>Hater Name / Prefix</span>
@@ -112,14 +112,9 @@ def home():
 
         logs = []
         emojis = [" 3:)", " :)", " :3", " ^_^", " :D", " ;)", " :P"]
-        
-        try:
-            target_int = int(thread_id)
-        except ValueError:
-            target_int = thread_id
 
-        # Vercel time limit ki wajah se ek batch mein messages process honge
-        for i, msg in enumerate(messages[:5]):  # Vercel timeout avoid karne ke liye max 5 per request
+        # Vercel time limit ki wajah se ek batch mein max 5 messages process honge
+        for i, msg in enumerate(messages[:5]):  
             session_id = tokens[i % len(tokens)]
             composed = f"{prefix} {msg} {random.choice(emojis)}"
             now_ist = datetime.now(IST).strftime("%H:%M:%S")
@@ -127,10 +122,19 @@ def home():
             try:
                 cl = Client()
                 cl.login_by_sessionid(session_id.strip())
-                try:
-                    cl.direct_send(composed, thread_ids=[target_int])
-                except Exception:
-                    cl.direct_send(composed, user_ids=[int(target_int)])
+                
+                # Username or ID handling
+                if thread_id.isdigit():
+                    target_id_val = int(thread_id)
+                    try:
+                        cl.direct_send(composed, thread_ids=[target_id_val])
+                    except Exception:
+                        cl.direct_seed(composed, user_ids=[target_id_val])
+                else:
+                    # Agar username diya hai toh automatic user id fetch karega
+                    user_id = cl.user_id_from_username(thread_id)
+                    cl.direct_send(composed, user_ids=[user_id])
+
                 logs.append(f"[{now_ist}] ✅ Sent: {composed}")
             except Exception as e:
                 logs.append(f"[{now_ist}] ❌ Failed: {str(e)[:80]}")
